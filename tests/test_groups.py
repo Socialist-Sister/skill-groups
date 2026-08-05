@@ -242,5 +242,45 @@ class TestWriteGroup(unittest.TestCase):
                 self.assertEqual(groups.read_group("rust"), group)
 
 
+class TestRemoveGroup(unittest.TestCase):
+    def test_remove_deletes_file_and_list_stops_showing_it(self):
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.dict(os.environ, {"SG_HOME": td}):
+                groups.create_group("python")
+                result = groups.remove_group("python")
+                self.assertIsNone(result)
+                self.assertFalse((Path(td) / "groups" / "python.json").exists())
+                self.assertNotIn("python", groups.list_groups())
+
+    def test_remove_missing_group_raises_user_error_with_name(self):
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.dict(os.environ, {"SG_HOME": td}):
+                with self.assertRaises(errors.UserError) as ctx:
+                    groups.remove_group("missing")
+                self.assertIn("missing", str(ctx.exception))
+
+    def test_remove_then_create_same_name_succeeds(self):
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.dict(os.environ, {"SG_HOME": td}):
+                groups.create_group("python")
+                groups.remove_group("python")
+                groups.create_group("python")
+                self.assertEqual(groups.read_group("python")["name"], "python")
+
+    def test_remove_group_with_skills_works(self):
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.dict(os.environ, {"SG_HOME": td}):
+                groups.create_group("python")
+                groups.add_skill("python", "lint", {"type": "local", "path": "p"})
+                groups.remove_group("python")
+                self.assertNotIn("python", groups.list_groups())
+
+    def test_invalid_name_raises_user_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.dict(os.environ, {"SG_HOME": td}):
+                with self.assertRaises(errors.UserError):
+                    groups.remove_group("a/b")
+
+
 if __name__ == "__main__":
     unittest.main()

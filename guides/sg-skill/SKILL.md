@@ -57,7 +57,7 @@ If the user wants their skills organized into groups:
 | `sg ls` | list mounted skills (`skill (group, source)`) |
 | `sg status` | per-skill state report (exit 0) |
 | `sg sync` | repair mounts to match declaration |
-| `sg group create/add/list/show` | manage group definitions |
+| `sg group create/add/list/show/rm` | manage group definitions |
 | `sg doctor` | environment report (python/git/SG_HOME/junction) |
 
 ## Failure handling

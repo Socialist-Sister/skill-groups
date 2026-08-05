@@ -96,13 +96,13 @@ def validate_group(group):
     return {"name": name, "description": description, "skills": normalized_skills}
 
 
-def group_path(name):
+def group_path(name, home=None):
     """Return groups_dir()/<name>.json; reject empty or separator names."""
     if not isinstance(name, str) or not name:
         raise errors.UserError("group name must be a non-empty string")
     if "/" in name or "\\" in name:
         raise errors.UserError(f"invalid group name: {name!r}")
-    return config.groups_dir() / f"{name}.json"
+    return config.groups_dir(home) / f"{name}.json"
 
 
 def read_group(name):
@@ -148,6 +148,23 @@ def add_skill(group_name, skill_id, source):
     group["skills"].append(skill)
     write_group(group)
     return group
+
+
+def remove_group(name, home=None):
+    """Delete a registered group definition; unknown group -> UserError.
+
+    Returns None. Only the definition file is removed; projects that already
+    mounted the group are untouched and will report an unknown group on their
+    next use/sync.
+    """
+    path = group_path(name, home)
+    if not path.exists():
+        raise errors.UserError(f"unknown group: {name}")
+    try:
+        path.unlink()
+    except OSError as exc:
+        raise errors.EnvError(f"cannot remove group {name}: {exc}") from exc
+    return None
 
 
 def group_show(name):

@@ -233,6 +233,22 @@ class TestCli(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertTrue(result.stderr.strip())
 
+    def test_group_rm_removes_group(self):
+        """group create demo + group rm demo -> exit 0, list no longer shows demo."""
+        self.assertEqual(self.sg("group", "create", "demo").returncode, 0)
+        result = self.sg("group", "rm", "demo")
+        self.assertEqual(result.returncode, 0)
+        listing = self.sg("group", "list")
+        self.assertEqual(listing.returncode, 0)
+        self.assertNotIn("demo", listing.stdout)
+
+    def test_group_rm_missing_group_fails(self):
+        """group rm nonexistent -> exit 1, stderr names the group."""
+        result = self.sg("group", "rm", "nonexistent")
+        self.assertEqual(result.returncode, 1)
+        self.assertTrue(result.stderr.strip())
+        self.assertIn("nonexistent", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

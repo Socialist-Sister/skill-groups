@@ -103,6 +103,10 @@ def build_parser():
     g.add_argument("name")
     g.set_defaults(func=cmd_group_show)
 
+    g = gsub.add_parser("rm", help="remove a group definition")
+    g.add_argument("name")
+    g.set_defaults(func=cmd_group_rm)
+
     p = sub.add_parser("doctor", help="report the environment")
     p.set_defaults(func=cmd_doctor)
 
@@ -238,6 +242,12 @@ def cmd_group_list(args):
 def cmd_group_show(args):
     group = groups.group_show(args.name)
     print(json.dumps(group, indent=2, ensure_ascii=False), flush=True)
+    return 0
+
+
+def cmd_group_rm(args):
+    groups.remove_group(args.name)
+    print(f"removed group {args.name}", flush=True)
     return 0
 
 

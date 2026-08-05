@@ -2,7 +2,7 @@
 
 Organize AI-agent skills into named groups and mount them per project — the dotfiles of the AI skill world
 
-[中文](README.zh-CN.md)
+[中文](README.zh-CN.md) · [![CI](https://github.com/Socialist-Sister/skill-groups/actions/workflows/ci.yml/badge.svg)](https://github.com/Socialist-Sister/skill-groups/actions/workflows/ci.yml)
 
 Collect the skills you actually use into named groups (e.g. `python`, `web`, `sql`), declare which groups a project needs, and let one command mount the right skills into the right agent directory. Zero dependencies, works on Python 3.9+.
 
@@ -157,7 +157,7 @@ Rules enforced on every read:
 - Skill `id` must be unique within the group.
 - `local` sources require a string `path`; `git` sources require a string `repo` (`path` and `rev` are optional).
 
-Inspect your groups with `sg group list` and `sg group show python`.
+Inspect your groups with `sg group list` and `sg group show python`. Remove a group (its definition file) with `sg group rm python` — note that projects whose `.sg.json` still declares the removed group will report `unknown group` on the next `sg use`/`sg sync`.
 
 ## Cache and mount mechanism
 

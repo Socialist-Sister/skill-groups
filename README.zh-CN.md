@@ -4,7 +4,7 @@
 
 把你真正在用的技能收集成命名组（如 `python`、`web`、`sql`），声明项目需要哪些组，一条命令把正确的技能挂载进正确的 agent 目录。零依赖，Python 3.9+。
 
-[English](README.md)
+[English](README.md) · [![CI](https://github.com/Socialist-Sister/skill-groups/actions/workflows/ci.yml/badge.svg)](https://github.com/Socialist-Sister/skill-groups/actions/workflows/ci.yml)
 
 ## 为什么需要它
 
@@ -157,7 +157,7 @@ sg sync
 - 组内技能 `id` 必须唯一。
 - `local` 源必须有字符串 `path`；`git` 源必须有字符串 `repo`（`path` 和 `rev` 可选）。
 
-用 `sg group list` 和 `sg group show python` 查看你的组。
+用 `sg group list` 和 `sg group show python` 查看你的组。用 `sg group rm python` 删除组（定义文件）——注意：`.sg.json` 仍声明了该组的项目，下次 `sg use`/`sg sync` 会报 `unknown group`。
 
 ## 缓存与挂载机制
 
