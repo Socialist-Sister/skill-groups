@@ -35,13 +35,18 @@ def project_skills_dir(root, decl):
     return Path(root) / config.resolve_agent_dir(decl["agent"])
 
 
-def use_groups(root, group_names, home=None):
-    """Mount every skill of the named groups, atomically.
+def use_groups(root, group_names, extra_skills=None, home=None):
+    """Mount every skill of the named groups plus standalone skills, atomically.
 
     Reads the declaration and lock, resolves every skill into the cache,
     then pre-flights every target link. Any conflict aborts the whole batch
-    before a single mount (S5). On success the declaration groups are merged
-    (deduped, order preserved) and sg.lock records each mount.
+    before a single mount (S5). ``extra_skills`` is an optional list of
+    {"id", "source"} dicts for skills declared directly in the project (no
+    group); group and standalone skills share one all-or-nothing batch, so
+    a same-id/different-source clash anywhere aborts everything. On success
+    the declaration groups and skills lists are merged (deduped, order
+    preserved) and sg.lock records each mount — standalone entries carry
+    group "".
     """
     decl = _read_declaration(root)
     lock = lockfile.read_lock(root)
@@ -49,9 +54,18 @@ def use_groups(root, group_names, home=None):
     mode = decl.get("mode", "auto")
 
     entries = _collect_skills(group_names)
+    for extra in extra_skills or []:
+        skill_id = extra.get("id")
+        if not isinstance(skill_id, str):
+            raise errors.UserError("each standalone skill requires a string id")
+        source = groups.validate_source(extra.get("source"))
+        entries.append((skill_id, "", source))
+
     resolved, conflicts = _preflight(entries, skills_dir, home)
     if conflicts:
         raise errors.UserError(_conflict_message(conflicts))
+
+    entries = _dedupe_by_skill_id(entries)
 
     util.ensure_dir(skills_dir)
     for skill_id, _group, _source in entries:
@@ -59,7 +73,10 @@ def use_groups(root, group_names, home=None):
         mount.mount_skill(skills_dir, skill_id, cache_dir, mode)
 
     merged = _merge_group_names(decl.get("groups", []), group_names)
-    lockfile.write_declaration(root, merged, decl["agent"], decl["mode"])
+    merged_skills = _merge_skills(decl.get("skills", []), extra_skills)
+    lockfile.write_declaration(
+        root, merged, decl["agent"], decl["mode"], skills=merged_skills
+    )
     new_lock = dict(lock)
     for skill_id, group_name, source in entries:
         cache_dir, sha = resolved[skill_id]
@@ -72,32 +89,46 @@ def use_groups(root, group_names, home=None):
     lockfile.write_lock(root, new_lock)
 
 
-def unuse_groups(root, group_names, home=None):
-    """Un-mount the skills of the named groups.
+def unuse_groups(root, group_names, extra_skill_ids=None, home=None):
+    """Un-mount the skills of the named groups and standalone skills.
 
-    Unknown group names are ignored (idempotent). A skill is un-mounted only
-    when no remaining declared group still references it, so groups sharing a
-    skill keep it mounted (S2). The declaration drops the group names and
-    sg.lock loses the un-mounted entries.
+    Unknown group names and undeclared standalone skill ids are ignored
+    (idempotent). A skill is un-mounted only when no remaining declared
+    group still references it and it is no longer declared as a standalone
+    skill, so groups and skills sharing a skill keep it mounted (S2). The
+    declaration drops the group names and the standalone skills and sg.lock
+    loses the un-mounted entries.
     """
     decl = _read_declaration(root)
     lock = lockfile.read_lock(root)
     skills_dir = project_skills_dir(root, decl)
 
-    declared = list(decl.get("groups", []))
-    to_remove = [name for name in group_names if name in declared]
-    if not to_remove:
-        return
-    remaining = [name for name in declared if name not in to_remove]
+    declared_groups = list(decl.get("groups", []))
+    declared_skills = list(decl.get("skills", []))
+    remove_groups = [name for name in group_names if name in declared_groups]
+    remaining_groups = [name for name in declared_groups if name not in remove_groups]
 
-    removed_skills = _skills_of_groups(to_remove, lock)
-    referenced = _skills_of_groups(remaining, lock)
-    for skill_id in sorted(removed_skills - referenced):
+    declared_ids = {skill["id"] for skill in declared_skills}
+    remove_skill_ids = [sid for sid in (extra_skill_ids or []) if sid in declared_ids]
+    remaining_skills = [s for s in declared_skills if s["id"] not in remove_skill_ids]
+
+    if not remove_groups and not remove_skill_ids:
+        return
+
+    removed_skills = _skills_of_groups(remove_groups, lock)
+    referenced = _skills_of_groups(remaining_groups, lock)
+    referenced.update(skill["id"] for skill in remaining_skills)
+    candidates = removed_skills | set(remove_skill_ids)
+    for skill_id in sorted(candidates - referenced):
+        if skill_id not in lock:
+            continue
         link = skills_dir / skill_id
         mount.unmount_skill(link, _mount_kind(link))
         lock.pop(skill_id, None)
 
-    lockfile.write_declaration(root, remaining, decl["agent"], decl["mode"])
+    lockfile.write_declaration(
+        root, remaining_groups, decl["agent"], decl["mode"], skills=remaining_skills
+    )
     lockfile.write_lock(root, lock)
 
 
@@ -277,8 +308,8 @@ def _preflight(entries, skills_dir, home):
         prev = resolved.get(skill_id)
         if prev is not None and prev[0] != cache_dir:
             report(
-                f"skill {skill_id!r} is declared by two groups with different "
-                f"sources and cannot be mounted twice"
+                f"skill {skill_id!r} is declared by two groups or skills with "
+                f"different sources and cannot be mounted twice"
             )
         resolved.setdefault(skill_id, (cache_dir, sha))
 
@@ -302,8 +333,8 @@ def _points_at(link, cache_dir):
 def _conflict_message(conflicts):
     lines = "\n".join(f"  - {c}" for c in conflicts)
     return (
-        "cannot use these groups: the following conflicts block the mount. "
-        "Nothing was changed.\n" + lines
+        "cannot use the requested groups/skills: the following conflicts block "
+        "the mount. Nothing was changed.\n" + lines
     )
 
 
@@ -316,6 +347,35 @@ def _merge_group_names(existing, group_names):
             seen.add(name)
             merged.append(name)
     return merged
+
+
+def _merge_skills(existing, extra_skills):
+    """Dedupe-merge standalone skills by id, preserving the original order."""
+    merged = list(existing)
+    seen = {skill["id"] for skill in merged}
+    for extra in extra_skills or []:
+        skill_id = extra["id"]
+        if skill_id not in seen:
+            seen.add(skill_id)
+            merged.append({"id": skill_id, "source": extra["source"]})
+    return merged
+
+
+def _dedupe_by_skill_id(entries):
+    """Drop later entries sharing a skill id; the first occurrence wins.
+
+    Only safe after a conflict-free preflight: any same-id entries still in
+    the batch then resolve to the same cache dir, so the first (group)
+    entry is the one recorded in the lock.
+    """
+    seen = set()
+    unique = []
+    for entry in entries:
+        if entry[0] in seen:
+            continue
+        seen.add(entry[0])
+        unique.append(entry)
+    return unique
 
 
 def _skills_of_groups(group_names, lock):
@@ -339,12 +399,14 @@ def _skills_of_groups(group_names, lock):
 
 
 def _declared_skills(decl):
-    """{skill_id: {"group", "source"}} from the declaration's group files.
+    """{skill_id: {"group", "source"}} from the declaration's group files and
+    its standalone skill entries.
 
-    Groups are read in declaration order; the first occurrence of a skill
-    id wins (a skill shared by two groups keeps the first group's source,
-    matching use_groups). A group whose definition file is missing or
-    invalid contributes no skills — its locked skills surface as stale.
+    Group skills are read in declaration order, then the declaration's own
+    "skills" entries (group ""); the first occurrence of a skill id wins (a
+    skill shared by two groups keeps the first group's source, matching
+    use_groups). A group whose definition file is missing or invalid
+    contributes no skills — its locked skills surface as stale.
     """
     declared = {}
     for name in decl.get("groups", []):
@@ -356,6 +418,10 @@ def _declared_skills(decl):
             declared.setdefault(
                 skill["id"], {"group": name, "source": skill["source"]}
             )
+    for skill in decl.get("skills", []):
+        declared.setdefault(
+            skill["id"], {"group": "", "source": skill["source"]}
+        )
     return declared
 
 

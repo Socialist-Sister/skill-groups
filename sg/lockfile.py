@@ -22,13 +22,18 @@ def lock_file(root):
     return Path(root) / "sg.lock"
 
 
-def write_declaration(root, groups, agent, mode):
-    """Write .sg.json and return the path written."""
+def write_declaration(root, groups, agent, mode, skills=None):
+    """Write .sg.json and return the path written.
+
+    ``skills`` is the optional list of standalone skill entries
+    ({"id", "source"}). When omitted (None) the field is not written, so
+    legacy declarations keep their exact shape.
+    """
     path = sg_json(root)
-    util.write_json(
-        path,
-        {"version": _VERSION, "groups": groups, "agent": agent, "mode": mode},
-    )
+    data = {"version": _VERSION, "groups": groups, "agent": agent, "mode": mode}
+    if skills is not None:
+        data["skills"] = skills
+    util.write_json(path, data)
     return path
 
 

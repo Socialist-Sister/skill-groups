@@ -48,10 +48,22 @@ def build_parser():
 
     p = sub.add_parser("use", help="mount the skills of named groups")
     p.add_argument("groups", nargs="+", metavar="GROUP")
+    p.add_argument(
+        "--skill", action="append", default=[], metavar="ID",
+        help="mount a standalone skill directly; pair each --skill with --path",
+    )
+    p.add_argument(
+        "--path", action="append", default=[], metavar="DIR",
+        help="local source path for the matching --skill",
+    )
     p.set_defaults(func=cmd_use)
 
     p = sub.add_parser("unuse", help="unmount the skills of named groups")
     p.add_argument("groups", nargs="+", metavar="GROUP")
+    p.add_argument(
+        "--skill", action="append", default=[], metavar="ID",
+        help="also un-mount these standalone skills",
+    )
     p.set_defaults(func=cmd_unuse)
 
     p = sub.add_parser("ls", help="list mounted skills")
@@ -101,7 +113,10 @@ def cmd_init(args):
     root = Path.cwd()
     if args.force and lockfile.sg_json(root).exists():
         existing = _declared_groups(root)
-        lockfile.write_declaration(root, existing, args.agent, args.mode)
+        existing_skills = _declared_skills_entries(root)
+        lockfile.write_declaration(
+            root, existing, args.agent, args.mode, skills=existing_skills
+        )
         state._append_gitignore(root, config.resolve_agent_dir(args.agent))
         print(f"reinitialized {root}", flush=True)
         return 0
@@ -119,15 +134,36 @@ def _declared_groups(root):
     return declared if isinstance(declared, list) else []
 
 
+def _declared_skills_entries(root):
+    """Standalone skills already declared, preserved when force-rewriting."""
+    try:
+        skills = lockfile.read_declaration(root).get("skills", [])
+    except (errors.UserError, errors.EnvError):
+        skills = []
+    return skills if isinstance(skills, list) else []
+
+
 def cmd_use(args):
-    state.use_groups(Path.cwd(), args.groups)
-    print(f"used: {', '.join(args.groups)}", flush=True)
+    if len(args.skill) != len(args.path):
+        raise errors.UserError("--skill and --path must come in pairs")
+    extra_skills = [
+        {"id": skill_id, "source": {"type": "local", "path": path}}
+        for skill_id, path in zip(args.skill, args.path)
+    ]
+    state.use_groups(Path.cwd(), args.groups, extra_skills=extra_skills)
+    used = ", ".join(args.groups)
+    if extra_skills:
+        used += " + " + ", ".join(args.skill)
+    print(f"used: {used}", flush=True)
     return 0
 
 
 def cmd_unuse(args):
-    state.unuse_groups(Path.cwd(), args.groups)
-    print(f"unused: {', '.join(args.groups)}", flush=True)
+    state.unuse_groups(Path.cwd(), args.groups, extra_skill_ids=args.skill)
+    unused = ", ".join(args.groups)
+    if args.skill:
+        unused += " + " + ", ".join(args.skill)
+    print(f"unused: {unused}", flush=True)
     return 0
 
 
@@ -135,7 +171,7 @@ def cmd_ls(args):
     lock = lockfile.read_lock(Path.cwd())
     items = sorted(lock.items(), key=lambda kv: (kv[1].get("group", ""), kv[0]))
     for skill_id, entry in items:
-        group = entry.get("group", "")
+        group = entry.get("group", "") or "ungrouped"
         source_type = entry.get("source", {}).get("type", "unknown")
         print(f"{skill_id} ({group}, {source_type})", flush=True)
     return 0
