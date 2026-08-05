@@ -40,6 +40,7 @@ class TestResolveLinkTarget(unittest.TestCase):
 
 
 class TestJunction(unittest.TestCase):
+    @unittest.skipUnless(IS_WIN, "junctions only exist on Windows")
     def test_create_junction_lists_target_contents_and_target_intact(self):
         td = tempfile.TemporaryDirectory()
         self.addCleanup(td.cleanup)
@@ -91,7 +92,9 @@ class TestMountSkill(unittest.TestCase):
         self.assertEqual(
             mount.mount_skill(self.skills, "demo", self.cache, "auto"), "created"
         )
-        self.addCleanup(lambda: mount.unmount_skill(self.link, "junction"))
+        # "copy" mode unmounts by detecting the actual mount kind
+        # (junction/symlink/dir), so cleanup is safe on every platform.
+        self.addCleanup(lambda: mount.unmount_skill(self.link, "copy"))
         self.assertEqual(
             mount.mount_skill(self.skills, "demo", self.cache, "auto"), "exists"
         )
@@ -106,7 +109,7 @@ class TestMountSkill(unittest.TestCase):
         self.assertEqual(
             mount.mount_skill(self.skills, "demo", self.cache, "auto"), "created"
         )
-        self.addCleanup(lambda: mount.unmount_skill(self.link, "junction"))
+        self.addCleanup(lambda: mount.unmount_skill(self.link, "copy"))
         with self.assertRaises(errors.UserError):
             mount.mount_skill(self.skills, "demo", other, "auto")
         # original mount is untouched
@@ -182,6 +185,7 @@ class TestSymlinkMode(unittest.TestCase):
 
 
 class TestUnmount(unittest.TestCase):
+    @unittest.skipUnless(IS_WIN, "junctions only exist on Windows")
     def test_unmount_junction_removes_link_keeps_target(self):
         td = tempfile.TemporaryDirectory()
         self.addCleanup(td.cleanup)
