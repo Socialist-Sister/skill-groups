@@ -84,6 +84,15 @@ sg use python
 ```
 
 ```powershell
+# 4b. mount a standalone skill too (no group required)
+sg use python --skill git-commit-writer --path "C:\path\to\git-commit-writer"
+# used: python
+# used skill: git-commit-writer
+```
+
+`--skill`/`--path` can be repeated (they must come in pairs). Standalone skills are recorded in `.sg.json` under `skills` (group is `ungrouped` in `sg ls`) and are fully covered by `sg status`/`sg sync`/`sg unuse --skill <id>`.
+
+```powershell
 # 5. see what's mounted
 sg ls
 # format (python, local)
