@@ -31,6 +31,8 @@ Each agent already reads a conventional skills directory inside the project root
 
 Pick the target with `sg init --agent claude` (choices: `agents`, `claude`, `codex`, `opencode`; default `agents`).
 
+> **Claude Code users**: you MUST run `sg init --agent claude` — Claude Code does not scan `.agents/skills` yet (tracked in [anthropics/claude-code#16345](https://github.com/anthropics/claude-code/issues/16345)); the default would silently load nothing. And after mounting, always start a **new session** — Claude Code has no in-session skill reload.
+
 ## Install
 
 The package is a zero-dependency Python 3.9+ CLI named `sg`.
