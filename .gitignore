@@ -4,3 +4,7 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# local-only files (session context handoff, manual QA logs)
+STATUS.md
+docs/manual_qa_results.txt
