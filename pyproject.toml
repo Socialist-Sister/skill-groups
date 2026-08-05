@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skill-groups"
+version = "0.1.0"
+description = "Organize AI-agent skills into named groups and mount them per project (the dotfiles of AI skills)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+sg = "sg.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sg"]
+
+[tool.hatch.build.targets.sdist]
+include = ["sg", "tests", "README.md", "LICENSE"]
