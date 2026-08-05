@@ -23,7 +23,7 @@ Three layers:
 6. **Mount**: `sg use <group> [<group>...] [--skill <id> --path <dir>]...`
    - `--skill`/`--path` come in pairs and may be repeated for standalone skills. Standalone sources are local directories containing `SKILL.md`.
    - Inside a group, sources may be `local` (a path) or `git` (repo/path/rev); standalone skills are local only.
-7. **Verify**: `sg ls` (mounted list) and `sg status` (per-skill state `ok`/`missing-link`/`drift`/`conflict`/`stale`). Tell the user to **start a new agent session** — mounts are picked up at session start. If you are Claude Code, this warning is MANDATORY (Claude Code has no reload command).
+7. **Verify**: `sg ls` (mounted list) and `sg status` (per-skill state `ok`/`missing-link`/`drift`/`conflict`/`stale`). Tell the user to **fully restart their agent** — skills are registered at process start, and a new session inside a long-running agent (e.g. `/new` in OpenCode, a new window in Cursor) does NOT re-scan. If you are Claude Code, this warning is MANDATORY (Claude Code has no reload command).
 8. **Cleanup when asked**: `sg unuse <group>... [--skill <id>...]` unmounts only what the user names; shared skills stay mounted while any remaining group references them. `sg sync` repairs mounts to match the declaration.
 
 ## Agent-specific notes (READ THIS BEFORE sg init)
@@ -32,7 +32,7 @@ You know which agent you are. Map yourself:
 
 | If you are running inside… | Use `sg init --agent …` | Mount dir | Notes |
 |---|---|---|---|
-| **Claude Code** | `claude` | `.claude/skills` | **MANDATORY**: Claude Code does NOT scan `.agents/skills` yet (tracked in anthropics/claude-code#16345). Using the default would silently fail — the skills would never load. Also: no in-session reload — always tell the user to open a NEW session after mounting. |
+| **Claude Code** | `claude` | `.claude/skills` | **MANDATORY**: Claude Code does NOT scan `.agents/skills` yet (tracked in anthropics/claude-code#16345). Using the default would silently fail — the skills would never load. Also: no in-session reload — always tell the user to restart the agent after mounting. |
 | Codex CLI | `codex` | `.codex/skills` | |
 | OpenCode | `opencode` | `.opencode/skills` | also reads `.agents/skills` |
 | Cursor / Gemini CLI / Copilot CLI / other | `agents` (default) | `.agents/skills` | the cross-agent standard dir |
