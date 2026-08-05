@@ -15,7 +15,7 @@ Three layers:
 ## Workflow (when the user asks to configure skills for a project)
 
 1. **Check sg is installed**: run `sg --version`. If missing, install with
-   `pip install skill-groups` (or `pip install git+https://github.com/<owner>/skill-groups.git`). If pip is not usable, tell the user how to install.
+   `pip install skill-groups` (or `pip install git+https://github.com/Socialist-Sister/skill-groups.git`). If pip is not usable, tell the user how to install.
 2. **Identify your own agent FIRST**: you (the assistant) know which agent you are running inside. This decides the mount directory — see "Agent-specific notes" below. Pick the right `--agent` value for `sg init` accordingly.
 3. **See what groups exist**: `sg group list`, then `sg group show <name>` for details (skills + sources).
 4. **Decide what to mount** — ask the user, or suggest from the project's files (e.g. `pyproject.toml`/`requirements.txt` → a python group; lots of `*.md` → a docs group). Confirm group names AND any standalone skills before executing.

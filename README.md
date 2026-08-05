@@ -38,17 +38,18 @@ Pick the target with `sg init --agent claude` (choices: `agents`, `claude`, `cod
 The package is a zero-dependency Python 3.9+ CLI named `sg`.
 
 ```powershell
-# from the repo root
-pip install -e .
+pip install skill-groups
 ```
 
-The build backend is [hatchling](https://hatch.pypa.io/). If you install offline, skip the build-isolation step that would otherwise try to fetch it:
+**Or directly from GitHub** (no PyPI release needed):
 
 ```powershell
-pip install -e . --no-build-isolation
+pip install git+https://github.com/Socialist-Sister/skill-groups.git
 ```
 
 After install, `sg` is on your PATH and `sg --help` works from any directory.
+
+**Developers**: from a clone of this repo, `pip install -e .` installs in editable mode (the build backend is [hatchling](https://hatch.pypa.io/); offline use `pip install -e . --no-build-isolation`).
 
 **Zero-install alternative:** you don't have to install anything. From the repo root, `python -m sg` runs the same CLI directly, because the `sg` package is importable from the current directory. Every example below works with either `sg ...` or `python -m sg ...`.
 

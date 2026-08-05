@@ -8,8 +8,21 @@ version = "0.1.0"
 description = "Organize AI-agent skills into named groups and mount them per project (the dotfiles of AI skills)"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = "MIT"
+authors = [{ name = "Socialist-Sister" }]
+keywords = ["skills", "agent", "ai-agent", "cli", "workflow", "claude-code", "codex"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Socialist-Sister/skill-groups"
+Repository = "https://github.com/Socialist-Sister/skill-groups"
+Documentation = "https://github.com/Socialist-Sister/skill-groups#readme"
 
 [project.scripts]
 sg = "sg.cli:main"
