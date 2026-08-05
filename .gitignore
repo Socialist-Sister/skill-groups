@@ -8,3 +8,4 @@ build/
 # local-only files (session context handoff, manual QA logs)
 STATUS.md
 docs/manual_qa_results.txt
+.omo/
