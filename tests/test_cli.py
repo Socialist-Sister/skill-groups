@@ -225,6 +225,14 @@ class TestCli(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertTrue((self.project / ".sg.json").exists())
 
+    def test_env_error_exits_2(self):
+        # SG_HOME pointing at a plain file is an environment error (exit 2).
+        not_a_dir = self.base / "not-a-dir"
+        not_a_dir.write_text("x", encoding="utf-8")
+        result = self.sg("group", "create", "demo", env={"SG_HOME": str(not_a_dir)})
+        self.assertEqual(result.returncode, 2)
+        self.assertTrue(result.stderr.strip())
+
 
 if __name__ == "__main__":
     unittest.main()

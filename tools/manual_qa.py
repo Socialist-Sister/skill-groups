@@ -13,6 +13,8 @@ Each of the nine checks is isolated in its own try/except: a FAIL is
 printed and the run continues. The script exits 0 only when all checks
 pass, 1 otherwise. Every print is flushed so redirecting stdout captures
 a complete, ordered report.
+"""
+from __future__ import annotations
 
 Zero dependencies: standard library + the in-tree `sg` package. sys.path
 is extended with the project root so `python tools/manual_qa.py` works
