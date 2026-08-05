@@ -2,6 +2,8 @@
 
 Organize AI-agent skills into named groups and mount them per project — the dotfiles of the AI skill world
 
+[中文](README.zh-CN.md)
+
 Collect the skills you actually use into named groups (e.g. `python`, `web`, `sql`), declare which groups a project needs, and let one command mount the right skills into the right agent directory. Zero dependencies, works on Python 3.9+.
 
 ## Why
