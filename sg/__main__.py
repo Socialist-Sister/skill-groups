@@ -1,3 +1,5 @@
-from sg import __version__
+import sys
 
-print(f"skill-groups {__version__}")
+from sg.cli import main
+
+sys.exit(main())
