@@ -93,7 +93,8 @@ sg ls
 ```powershell
 # 6. check status while the skills are mounted
 sg status
-# ok: 2 skills
+# format (python): ok
+# lint (python): ok
 ```
 
 ```powershell
@@ -105,10 +106,11 @@ sg unuse python
 ```powershell
 # 8. repair mounts to match the declaration
 sg sync
-# sync: nothing to do
+# format: unchanged
+# lint: unchanged
 ```
 
-`sg status` reports how many skills the lock records, and `sg sync` repairs mounts to match the declaration. Both report `nothing to do` when the project is up to date.
+`sg status` prints one line per mounted skill (`skill (group): state`, where state is `ok`, `missing-link`, `drift`, `conflict`, or `stale`), and `sg sync` repairs mounts to match the declaration (actions: `unchanged`, `remounted`, `relinked`, `renewed`, `removed`, `skipped`). Both exit 0.
 
 ## Group definitions (schema v1)
 
