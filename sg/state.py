@@ -26,7 +26,9 @@ def init_project(root, agent="agents", mode="auto", home=None):
             f"{root} is already initialized as a skill-groups project"
         )
     rel_skills_dir = config.resolve_agent_dir(agent)
-    lockfile.write_declaration(root, [], agent, mount.resolve_mode(mode))
+    lockfile.write_declaration(
+        root, {"version": "1", "groups": [], "agent": agent, "mode": mount.resolve_mode(mode)}
+    )
     _append_gitignore(root, rel_skills_dir)
 
 
@@ -75,7 +77,14 @@ def use_groups(root, group_names, extra_skills=None, home=None):
     merged = _merge_group_names(decl.get("groups", []), group_names)
     merged_skills = _merge_skills(decl.get("skills", []), extra_skills)
     lockfile.write_declaration(
-        root, merged, decl["agent"], decl["mode"], skills=merged_skills
+        root,
+        {
+            "version": "1",
+            "groups": merged,
+            "agent": decl.get("agent", "agents"),
+            "mode": decl.get("mode", "auto"),
+            "skills": merged_skills,
+        },
     )
     new_lock = dict(lock)
     for skill_id, group_name, source in entries:
@@ -127,7 +136,14 @@ def unuse_groups(root, group_names, extra_skill_ids=None, home=None):
         lock.pop(skill_id, None)
 
     lockfile.write_declaration(
-        root, remaining_groups, decl["agent"], decl["mode"], skills=remaining_skills
+        root,
+        {
+            "version": "1",
+            "groups": remaining_groups,
+            "agent": decl.get("agent", "agents"),
+            "mode": decl.get("mode", "auto"),
+            "skills": remaining_skills,
+        },
     )
     lockfile.write_lock(root, lock)
 

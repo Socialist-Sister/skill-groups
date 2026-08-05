@@ -21,7 +21,9 @@ class TestDeclaration(unittest.TestCase):
     def test_write_creates_sg_json_with_correct_content(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            lockfile.write_declaration(root, ["python"], "agents", "auto")
+            lockfile.write_declaration(
+                root, {"version": "1", "groups": ["python"], "agent": "agents", "mode": "auto"}
+            )
             self.assertTrue(lockfile.sg_json(root).is_file())
             self.assertEqual(
                 util.read_json(lockfile.sg_json(root)),
@@ -36,7 +38,10 @@ class TestDeclaration(unittest.TestCase):
     def test_read_returns_what_was_written(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            lockfile.write_declaration(root, ["python", "web"], "claude", "manual")
+            lockfile.write_declaration(
+                root,
+                {"version": "1", "groups": ["python", "web"], "agent": "claude", "mode": "manual"},
+            )
             self.assertEqual(
                 lockfile.read_declaration(root),
                 {

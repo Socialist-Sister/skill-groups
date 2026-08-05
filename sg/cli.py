@@ -115,7 +115,14 @@ def cmd_init(args):
         existing = _declared_groups(root)
         existing_skills = _declared_skills_entries(root)
         lockfile.write_declaration(
-            root, existing, args.agent, args.mode, skills=existing_skills
+            root,
+            {
+                "version": "1",
+                "groups": existing,
+                "agent": args.agent,
+                "mode": args.mode,
+                "skills": existing_skills,
+            },
         )
         state._append_gitignore(root, config.resolve_agent_dir(args.agent))
         print(f"reinitialized {root}", flush=True)
