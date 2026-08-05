@@ -234,7 +234,7 @@ The default `SG_HOME` is `~/.sg`. Its layout: `config.json` (global config), `gr
 python -m unittest discover tests -v
 ```
 
-The suite runs 195 tests covering the CLI surface, group validation, caching, git sources, mounting, and isolation.
+The suite runs 210 tests covering the CLI surface, group validation, caching, git sources, mounting, standalone skills, and isolation.
 
 ## License
 
