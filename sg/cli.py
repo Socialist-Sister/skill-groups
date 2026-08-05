@@ -142,15 +142,18 @@ def cmd_ls(args):
 
 
 def cmd_status(args):
-    # T12 replaces this stub with a real drift report.
-    count = len(lockfile.read_lock(Path.cwd()))
-    print(f"ok: {count} skills", flush=True)
+    """Print one "skill_id (group): state" line per status entry."""
+    for item in state.status(Path.cwd()):
+        group = item["group"]
+        prefix = f"{item['skill']} ({group})" if group else item["skill"]
+        print(f"{prefix}: {item['state']}", flush=True)
     return 0
 
 
 def cmd_sync(args):
-    # T12 replaces this stub with a real repair pass.
-    print("sync: nothing to do", flush=True)
+    """Repair mounts to match the declaration, one "skill_id: action" line."""
+    for item in state.sync_groups(Path.cwd()):
+        print(f"{item['skill']}: {item['action']}", flush=True)
     return 0
 
 

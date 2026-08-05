@@ -174,11 +174,30 @@ class TestCli(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("demo", result.stdout)
 
-    def test_status_and_sync_stubs_exit_zero(self):
+    def test_status_and_sync_exit_zero_on_empty_project(self):
+        self.sg("init")
         status = self.sg("status")
         self.assertEqual(status.returncode, 0)
-        self.assertIn("ok:", status.stdout)
+        self.assertEqual(status.stdout.strip(), "")
         self.assertEqual(self.sg("sync").returncode, 0)
+
+    def test_status_without_init_hints_at_init(self):
+        result = self.sg("status")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("sg init", result.stderr)
+
+    def test_status_reports_ok_line_and_sync_exits_zero(self):
+        skill = self.make_skill("demo")
+        self.sg("group", "create", "web")
+        self.sg("group", "add", "web", "demo", "--type", "local", "--path", str(skill))
+        self.sg("init")
+        self.sg("use", "web")
+        status = self.sg("status")
+        self.assertEqual(status.returncode, 0)
+        self.assertIn("demo (web): ok", status.stdout)
+        sync = self.sg("sync")
+        self.assertEqual(sync.returncode, 0)
+        self.assertIn("demo: unchanged", sync.stdout)
 
     def test_doctor_reports_environment(self):
         result = self.sg("doctor")
