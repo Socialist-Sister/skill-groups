@@ -136,7 +136,7 @@ class TestCli(unittest.TestCase):
     def test_version_prints_exact_version(self):
         result = self.sg("--version")
         self.assertEqual(result.returncode, 0)
-        self.assertEqual(result.stdout.strip(), "0.2.0")
+        self.assertEqual(result.stdout.strip(), "0.2.1")
 
     def test_help_works(self):
         result = self.sg("--help")

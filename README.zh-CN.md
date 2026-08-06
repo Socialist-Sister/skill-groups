@@ -238,7 +238,7 @@ junction: supported
 python -m unittest discover tests -v
 ```
 
-测试套件共 236 个测试，覆盖 CLI 命令面、组校验、缓存、git 源、更新、挂载、多 agent 项目、孤立技能与隔离。
+测试套件共 238 个测试，覆盖 CLI 命令面、组校验、缓存、git 源、更新、挂载、多 agent 项目、孤立技能与隔离。
 
 ## 协议
 
