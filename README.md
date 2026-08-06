@@ -43,12 +43,6 @@ The package is a zero-dependency Python 3.9+ CLI named `sg`.
 pip install skill-groups
 ```
 
-**Or directly from GitHub** (no PyPI release needed):
-
-```powershell
-pip install git+https://github.com/Socialist-Sister/skill-groups.git
-```
-
 After install, `sg` is on your PATH and `sg --help` works from any directory.
 
 **Developers**: from a clone of this repo, `pip install -e .` installs in editable mode (the build backend is [hatchling](https://hatch.pypa.io/); offline use `pip install -e . --no-build-isolation`).

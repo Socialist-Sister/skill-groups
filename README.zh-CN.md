@@ -43,12 +43,6 @@ skill-groups 用三层结构代替一堆散乱的技能：
 pip install skill-groups
 ```
 
-**或直接从 GitHub 安装**（无需 PyPI 发布）：
-
-```powershell
-pip install git+https://github.com/Socialist-Sister/skill-groups.git
-```
-
 安装后 `sg` 就在 PATH 上，`sg --help` 在任何目录都可用。
 
 **开发者**：clone 本仓库后 `pip install -e .` 可编辑安装（构建后端为 [hatchling](https://hatch.pypa.io/)；离线时用 `pip install -e . --no-build-isolation`）。
