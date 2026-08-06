@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skill-groups"
-version = "0.1.0"
+version = "0.2.0"
 description = "Organize AI-agent skills into named groups and mount them per project (the dotfiles of AI skills)"
 readme = "README.md"
 requires-python = ">=3.9"

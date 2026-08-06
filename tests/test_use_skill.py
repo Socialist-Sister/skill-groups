@@ -159,7 +159,7 @@ class TestUseSkillConflicts(UseSkillTestCase):
         self.assertEqual(self.skills(), [])
         self.assertEqual(lockfile.read_lock(self.root), {})
         self.assertEqual(util.read_json(lockfile.sg_json(self.root))["groups"], [])
-        self.assertEqual(util.read_json(lockfile.sg_json(self.root)).get("skills"), None)
+        self.assertEqual(util.read_json(lockfile.sg_json(self.root))["skills"], [])
 
     def test_two_extra_skills_same_id_different_source_conflict(self):
         src_a = self.local_skill("a")

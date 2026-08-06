@@ -11,30 +11,74 @@ single mount happens.
 import os
 from pathlib import Path
 
-from . import cache, config, errors, groups, lockfile, mount, util
+from . import cache, config, errors, git_util, groups, lockfile, mount, util
 
 
-def init_project(root, agent="agents", mode="auto", home=None):
-    """Create .sg.json and make sure the agent skills dir is git-ignored.
+def init_project(root, agents=None, mode="auto", home=None, force=False):
+    """Create .sg.json (schema v2) and git-ignore every agent skills dir.
 
-    Refuses to overwrite an existing declaration. ``home`` is accepted for
-    signature symmetry with the other state functions but not used here.
+    ``agents`` is a list of agent names (default ["agents"]). Without
+    ``force`` an existing declaration is refused; with it, the declaration
+    is rewritten keeping the declared groups and standalone skills, so
+    `sg init --force --agent claude` can retarget an existing project.
+    ``home`` is accepted for signature symmetry with the other state
+    functions but not used here.
     """
     root = Path(root)
+    agents = _normalize_agents(agents)
+    mode = mount.resolve_mode(mode)
+    existing = None
     if lockfile.sg_json(root).exists():
-        raise errors.UserError(
-            f"{root} is already initialized as a skill-groups project"
-        )
-    rel_skills_dir = config.resolve_agent_dir(agent)
+        if not force:
+            raise errors.UserError(
+                f"{root} is already initialized as a skill-groups project"
+            )
+        existing = lockfile.read_declaration(root)
+    groups_list = list(existing.get("groups", [])) if existing else []
+    skills_list = list(existing.get("skills", [])) if existing else []
     lockfile.write_declaration(
-        root, {"version": "1", "groups": [], "agent": agent, "mode": mount.resolve_mode(mode)}
+        root, _decl_dict(groups_list, agents, mode, skills_list)
     )
-    _append_gitignore(root, rel_skills_dir)
+    _append_gitignore(root, [config.resolve_agent_dir(a) for a in agents])
 
 
-def project_skills_dir(root, decl):
-    """Absolute agent skills directory inside the project."""
-    return Path(root) / config.resolve_agent_dir(decl["agent"])
+def _normalize_agents(agents):
+    """Coerce an agents argument to a validated, non-empty list of names."""
+    if agents is None:
+        agents = ["agents"]
+    elif isinstance(agents, str):
+        agents = [agents]
+    result = []
+    for name in agents:
+        config.resolve_agent_dir(name)  # raises UserError for unknown names
+        if name not in result:
+            result.append(name)
+    return result
+
+
+def _decl_dict(groups_list, agents, mode, skills_list):
+    """Declaration dict in schema v2 (agents is a list)."""
+    return {
+        "version": "2",
+        "groups": groups_list,
+        "agents": list(agents),
+        "mode": mode,
+        "skills": skills_list,
+    }
+
+
+def _agents_of(decl):
+    """Agent names from a declaration, reading v2 or legacy v1 shapes."""
+    agents = decl.get("agents")
+    if isinstance(agents, list) and agents:
+        return agents
+    agent = decl.get("agent", "agents")
+    return [agent] if agent else ["agents"]
+
+
+def project_skills_dirs(root, decl):
+    """Absolute agent skills directories inside the project (one per agent)."""
+    return [Path(root) / config.resolve_agent_dir(a) for a in _agents_of(decl)]
 
 
 def use_groups(root, group_names, extra_skills=None, home=None):
@@ -52,7 +96,7 @@ def use_groups(root, group_names, extra_skills=None, home=None):
     """
     decl = _read_declaration(root)
     lock = lockfile.read_lock(root)
-    skills_dir = project_skills_dir(root, decl)
+    skills_dirs = project_skills_dirs(root, decl)
     mode = decl.get("mode", "auto")
 
     entries = _collect_skills(group_names)
@@ -63,28 +107,24 @@ def use_groups(root, group_names, extra_skills=None, home=None):
         source = groups.validate_source(extra.get("source"))
         entries.append((skill_id, "", source))
 
-    resolved, conflicts = _preflight(entries, skills_dir, home)
+    resolved, conflicts = _preflight(entries, skills_dirs, home)
     if conflicts:
         raise errors.UserError(_conflict_message(conflicts))
 
     entries = _dedupe_by_skill_id(entries)
 
-    util.ensure_dir(skills_dir)
+    for d in skills_dirs:
+        util.ensure_dir(d)
     for skill_id, _group, _source in entries:
         cache_dir, _sha = resolved[skill_id]
-        mount.mount_skill(skills_dir, skill_id, cache_dir, mode)
+        for d in skills_dirs:
+            mount.mount_skill(d, skill_id, cache_dir, mode)
 
     merged = _merge_group_names(decl.get("groups", []), group_names)
     merged_skills = _merge_skills(decl.get("skills", []), extra_skills)
     lockfile.write_declaration(
         root,
-        {
-            "version": "1",
-            "groups": merged,
-            "agent": decl.get("agent", "agents"),
-            "mode": decl.get("mode", "auto"),
-            "skills": merged_skills,
-        },
+        _decl_dict(merged, _agents_of(decl), mode, merged_skills),
     )
     new_lock = dict(lock)
     for skill_id, group_name, source in entries:
@@ -110,7 +150,7 @@ def unuse_groups(root, group_names, extra_skill_ids=None, home=None):
     """
     decl = _read_declaration(root)
     lock = lockfile.read_lock(root)
-    skills_dir = project_skills_dir(root, decl)
+    skills_dirs = project_skills_dirs(root, decl)
 
     declared_groups = list(decl.get("groups", []))
     declared_skills = list(decl.get("skills", []))
@@ -131,19 +171,14 @@ def unuse_groups(root, group_names, extra_skill_ids=None, home=None):
     for skill_id in sorted(candidates - referenced):
         if skill_id not in lock:
             continue
-        link = skills_dir / skill_id
-        mount.unmount_skill(link, _mount_kind(link))
+        for d in skills_dirs:
+            link = d / skill_id
+            mount.unmount_skill(link, _mount_kind(link))
         lock.pop(skill_id, None)
 
     lockfile.write_declaration(
         root,
-        {
-            "version": "1",
-            "groups": remaining_groups,
-            "agent": decl.get("agent", "agents"),
-            "mode": decl.get("mode", "auto"),
-            "skills": remaining_skills,
-        },
+        _decl_dict(remaining_groups, _agents_of(decl), decl.get("mode", "auto"), remaining_skills),
     )
     lockfile.write_lock(root, lock)
 
@@ -168,12 +203,14 @@ def status(root, home=None):
     Returns {"skill", "group", "state"} entries sorted by skill id. The
     declaration groups are re-read from their definition files and diffed
     against sg.lock with diff_decl_lock; the filesystem decides the final
-    state:
+    state. With multiple agent dirs the state is aggregated across all of
+    them (a skill is ok only when healthy in every dir; any dir with a
+    lock-less entry for a skill reports conflict):
 
-      ok            locked, link present, resolving to the locked cache
-                    dir, and that cache dir still exists
-      missing-link  locked but the link is gone, points elsewhere, or the
-                    cache dir it points at vanished
+      ok            locked, link present in every agent dir, resolving to
+                    the locked cache dir, and that cache dir still exists
+      missing-link  locked but at least one link is gone, points elsewhere,
+                    or the cache dir it points at vanished
       drift         locked but the group definition's source/rev changed
                     (or the group differs) and has not been synced
       conflict      a skills-dir entry exists with no lock entry
@@ -184,10 +221,10 @@ def status(root, home=None):
     """
     decl = _read_declaration(root)
     lock = lockfile.read_lock(root)
-    skills_dir = project_skills_dir(root, decl)
+    skills_dirs = project_skills_dirs(root, decl)
     return [
         {"skill": skill_id, "group": group, "state": state}
-        for skill_id, group, state in _assess(decl, lock, skills_dir)
+        for skill_id, group, state in _assess(decl, lock, skills_dirs)
     ]
 
 
@@ -199,26 +236,28 @@ def sync_groups(root, home=None):
     needed refreshing; missing-link becomes "relinked" (cache re-fetched if
     it vanished, wrong mount replaced); stale becomes "removed"; conflict
     is "skipped" — user-owned directories are never deleted; ok is
-    "unchanged". Idempotent: a second run on a converged project changes
-    nothing on disk and never rewrites sg.lock.
+    "unchanged". Every repair is applied to every agent skills dir.
+    Idempotent: a second run on a converged project changes nothing on
+    disk and never rewrites sg.lock.
     """
     decl = _read_declaration(root)
     lock = lockfile.read_lock(root)
-    skills_dir = project_skills_dir(root, decl)
+    skills_dirs = project_skills_dirs(root, decl)
     mode = decl.get("mode", "auto")
     declared = _declared_skills(decl)
     new_lock = dict(lock)
     actions = []
 
-    for skill_id, _group, state in _assess(decl, lock, skills_dir):
-        link = skills_dir / skill_id
+    for skill_id, _group, state in _assess(decl, lock, skills_dirs):
         if state == "ok":
             actions.append({"skill": skill_id, "action": "unchanged"})
         elif state == "conflict":
             actions.append({"skill": skill_id, "action": "skipped"})
         elif state == "stale":
-            if os.path.lexists(link):
-                mount.unmount_skill(link, _mount_kind(link))
+            for d in skills_dirs:
+                link = d / skill_id
+                if os.path.lexists(link):
+                    mount.unmount_skill(link, _mount_kind(link))
             new_lock.pop(skill_id, None)
             actions.append({"skill": skill_id, "action": "removed"})
         elif state == "missing-link":
@@ -226,7 +265,10 @@ def sync_groups(root, home=None):
             cache_dir, sha = cache.ensure_skill_cached(
                 info["source"], skill_id, home
             )
-            _repair_link(link, cache_dir, mode)
+            for d in skills_dirs:
+                link = d / skill_id
+                if not _link_ok(link, cache_dir):
+                    _repair_link(link, cache_dir, mode)
             new_lock[skill_id] = _lock_entry(
                 info["group"], info["source"], sha, cache_dir
             )
@@ -237,16 +279,59 @@ def sync_groups(root, home=None):
                 info["source"], skill_id, home
             )
             if str(cache_dir) != lock.get(skill_id, {}).get("cache_dir"):
-                _repair_link(link, cache_dir, mode, replace=True)
+                for d in skills_dirs:
+                    _repair_link(d / skill_id, cache_dir, mode, replace=True)
                 action = "remounted"
             else:
-                if not _link_ok(link, cache_dir):
-                    _repair_link(link, cache_dir, mode, replace=True)
+                for d in skills_dirs:
+                    link = d / skill_id
+                    if not _link_ok(link, cache_dir):
+                        _repair_link(link, cache_dir, mode, replace=True)
                 action = "renewed"
             new_lock[skill_id] = _lock_entry(
                 info["group"], info["source"], sha, cache_dir
             )
             actions.append({"skill": skill_id, "action": action})
+
+    if new_lock != lock:
+        lockfile.write_lock(root, new_lock)
+    return actions
+
+
+def update_groups(root, home=None):
+    """Refresh git-source skills to their latest upstream; return actions (S9).
+
+    Only skills that are both declared and locked are considered (stale
+    locked skills are left alone). A git source pinned to a 40-char commit
+    sha cannot move and reports "unchanged"; every other git source is
+    re-fetched and the lock's resolved_sha is refreshed when it moved.
+    Local sources report "unchanged". Actions are {"skill", "action"} with
+    action "updated" or "unchanged". A fetch failure aborts with the error
+    before any lock rewrite; previously refreshed skills keep their new
+    state, so a partial update is visible in sg.status afterwards.
+    """
+    decl = _read_declaration(root)
+    lock = lockfile.read_lock(root)
+    declared = _declared_skills(decl)
+    new_lock = dict(lock)
+    actions = []
+
+    for skill_id in sorted(lock):
+        if skill_id not in declared:
+            continue
+        source = declared[skill_id]["source"]
+        if source.get("type") != "git" or git_util.is_commit_sha(source.get("rev")):
+            actions.append({"skill": skill_id, "action": "unchanged"})
+            continue
+        cache_dir, sha = cache.refresh_skill_cached(source, skill_id, home)
+        if sha == lock[skill_id].get("resolved_sha"):
+            actions.append({"skill": skill_id, "action": "unchanged"})
+            continue
+        entry = dict(lock[skill_id])
+        entry["resolved_sha"] = sha
+        entry["cache_dir"] = str(cache_dir)
+        new_lock[skill_id] = entry
+        actions.append({"skill": skill_id, "action": "updated"})
 
     if new_lock != lock:
         lockfile.write_lock(root, new_lock)
@@ -268,17 +353,18 @@ def _read_declaration(root):
         ) from None
 
 
-def _append_gitignore(root, rel_skills_dir):
-    """Append the skills dir line to .gitignore, creating it if missing."""
+def _append_gitignore(root, rel_skills_dirs):
+    """Append the skills dir lines to .gitignore, creating it if missing."""
     gitignore = Path(root) / ".gitignore"
     lines = []
     if gitignore.exists():
         lines = gitignore.read_text(encoding="utf-8").splitlines()
-    if rel_skills_dir in lines:
+    missing = [d for d in rel_skills_dirs if d not in lines]
+    if not missing:
         return
     try:
         gitignore.write_text(
-            "\n".join(lines + [rel_skills_dir]) + "\n", encoding="utf-8"
+            "\n".join(lines + missing) + "\n", encoding="utf-8"
         )
     except OSError as exc:
         raise errors.EnvError(f"failed to update {gitignore}: {exc}") from exc
@@ -302,13 +388,14 @@ def _collect_skills(group_names):
     return entries
 
 
-def _preflight(entries, skills_dir, home):
+def _preflight(entries, skills_dirs, home):
     """Resolve every cache and detect conflicts; nothing is written.
 
     Returns (resolved, conflicts). resolved maps skill_id ->
     (cache_dir, sha). A conflict is either the same skill_id resolving to
-    two different cache dirs within one batch, or a target link that already
-    exists without pointing at this skill's cache dir.
+    two different cache dirs within one batch, or a target link in any
+    agent skills dir that already exists without pointing at this skill's
+    cache dir.
     """
     resolved = {}
     conflicts = []
@@ -329,12 +416,14 @@ def _preflight(entries, skills_dir, home):
             )
         resolved.setdefault(skill_id, (cache_dir, sha))
 
-        link = skills_dir / skill_id
-        if os.path.lexists(link) and not _points_at(link, cache_dir):
-            report(
-                f"target {skill_id} already exists and is not mounted from "
-                f"this skill's cache; remove it or use another name"
-            )
+        for d in skills_dirs:
+            link = d / skill_id
+            if os.path.lexists(link) and not _points_at(link, cache_dir):
+                report(
+                    f"target {skill_id} already exists in {d} and is not "
+                    f"mounted from this skill's cache; remove it or use "
+                    f"another name"
+                )
     return resolved, conflicts
 
 
@@ -483,23 +572,35 @@ def _repair_link(link, cache_dir, mode, replace=False):
     mount.mount_skill(link.parent, link.name, cache_dir, mode)
 
 
-def _assess(decl, lock, skills_dir):
+_STATE_PRIORITY = {"ok": 0, "missing-link": 1, "stale": 1, "drift": 2, "conflict": 3}
+
+
+def _assess(decl, lock, skills_dirs):
     """[(skill_id, group, state), ...] sorted by skill id.
 
     Classifies every declared skill (from the live group definitions) and
     every locked skill against the filesystem, plus any lock-less entry in
-    the skills dir (external conflict). diff_decl_lock splits declared vs
-    locked; the filesystem check decides ok vs missing-link. Lock-less
-    targets are conflicts regardless of the declaration, so an "added"
-    skill whose link already exists surfaces as a conflict, not a mount.
+    the skills dirs (external conflict). diff_decl_lock splits declared vs
+    locked; the filesystem check decides ok vs missing-link. With multiple
+    skills dirs, per-dir verdicts are aggregated per skill: missing-link
+    when any dir is unhealthy, conflict when any dir holds a lock-less
+    entry, and the severest of (conflict > drift > stale > missing-link >
+    ok) wins when categories overlap. Lock-less targets are conflicts
+    regardless of the declaration, so an "added" skill whose link already
+    exists surfaces as a conflict, not a mount.
     """
     declared = _declared_skills(decl)
     diff = lockfile.diff_decl_lock(declared, lock)
-    entries = []
+    agg = {}
+
+    def record(skill_id, group, state):
+        prev = agg.get(skill_id)
+        if prev is None or _STATE_PRIORITY[state] > _STATE_PRIORITY[prev[1]]:
+            agg[skill_id] = (group, state)
 
     for skill_id in diff["added"]:
-        if not os.path.lexists(skills_dir / skill_id):
-            entries.append((skill_id, declared[skill_id]["group"], "missing-link"))
+        if not all(os.path.lexists(d / skill_id) for d in skills_dirs):
+            record(skill_id, declared[skill_id]["group"], "missing-link")
     for skill_id in diff["changed"]:
         # diff_decl_lock also flags entries with resolved_sha None (local
         # sources lock a None sha by design), so drift is decided on the
@@ -507,31 +608,42 @@ def _assess(decl, lock, skills_dir):
         # change falls through to the plain link check.
         entry = lock[skill_id]
         if entry.get("source") != declared[skill_id]["source"]:
-            entries.append((skill_id, declared[skill_id]["group"], "drift"))
+            record(skill_id, declared[skill_id]["group"], "drift")
         else:
             state = (
                 "ok"
-                if _link_ok(skills_dir / skill_id, entry.get("cache_dir", ""))
+                if all(
+                    _link_ok(d / skill_id, entry.get("cache_dir", ""))
+                    for d in skills_dirs
+                )
                 else "missing-link"
             )
-            entries.append((skill_id, entry.get("group", ""), state))
+            record(skill_id, entry.get("group", ""), state)
     for skill_id in diff["removed"]:
-        entries.append((skill_id, lock[skill_id].get("group", ""), "stale"))
+        record(skill_id, lock[skill_id].get("group", ""), "stale")
     for skill_id in diff["unchanged"]:
         entry = lock[skill_id]
         state = (
             "ok"
-            if _link_ok(skills_dir / skill_id, entry.get("cache_dir", ""))
+            if all(
+                _link_ok(d / skill_id, entry.get("cache_dir", ""))
+                for d in skills_dirs
+            )
             else "missing-link"
         )
-        entries.append((skill_id, entry.get("group", ""), state))
+        record(skill_id, entry.get("group", ""), state)
 
-    if skills_dir.is_dir():
-        for name in sorted(e.name for e in os.scandir(skills_dir)):
+    for d in skills_dirs:
+        if not d.is_dir():
+            continue
+        for name in sorted(e.name for e in os.scandir(d)):
             if name not in lock:
-                entries.append((name, "", "conflict"))
+                record(name, "", "conflict")
 
-    return sorted(entries, key=lambda item: item[0])
+    return sorted(
+        (skill_id, group, state)
+        for skill_id, (group, state) in agg.items()
+    )
 
 
 def _mount_kind(link):

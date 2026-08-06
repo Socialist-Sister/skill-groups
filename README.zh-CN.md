@@ -31,7 +31,7 @@ skill-groups 用三层结构代替一堆散乱的技能：
 | Codex | `.codex/skills` |
 | OpenCode | `.opencode/skills` |
 
-用 `sg init --agent claude` 选择目标（可选：`agents`、`claude`、`codex`、`opencode`；默认 `agents`）。
+用 `sg init --agent claude` 选择目标（可选：`agents`、`claude`、`codex`、`opencode`；默认 `agents`）。**`--agent` 可重复** —— 一个项目可以同时为多个 agent 挂载：`sg init --agent claude --agent opencode` 用一份声明同时服务 `.claude/skills` 和 `.opencode/skills`。
 
 > **Claude Code 用户**：必须执行 `sg init --agent claude` —— Claude Code 目前不扫描 `.agents/skills`（追踪见 [anthropics/claude-code#16345](https://github.com/anthropics/claude-code/issues/16345)）；用默认值会静默地什么都加载不到。另外挂载完成后要**完全重启 agent** —— 技能在进程启动时注册；常驻型 agent（如 OpenCode 的 `/new`）内部新开会话不会重新扫描。
 
@@ -59,7 +59,7 @@ sg init
 # initialized C:\path\to\project
 ```
 
-这会写入 `.sg.json`，并把 agent 技能目录（默认 `.agents/skills`）加进你的 `.gitignore`。
+这会写入 `.sg.json`（schema v2），并把 agent 技能目录（默认 `.agents/skills`）加进你的 `.gitignore`。用 `sg init --agent claude --agent opencode` 让一个项目同时服务多个 agent；`sg init --force --agent codex` 可重新定向已有项目（保留组和孤立技能）。
 
 ```powershell
 # 2. 创建一个组
@@ -117,7 +117,14 @@ sg sync
 # lint: unchanged
 ```
 
-`sg status` 每个已挂载技能输出一行（`skill (group): state`，state 为 `ok`、`missing-link`、`drift`、`conflict` 或 `stale`）；`sg sync` 修复挂载使其与声明一致（动作：`unchanged`、`remounted`、`relinked`、`renewed`、`removed`、`skipped`）。两者退出码均为 0。
+```powershell
+# 9. 把 git 源技能刷新到上游最新
+sg update
+# lint: unchanged
+# pytest: updated
+```
+
+`sg status` 每个已挂载技能输出一行（`skill (group): state`，state 为 `ok`、`missing-link`、`drift`、`conflict` 或 `stale`）；`sg sync` 修复挂载使其与声明一致（动作：`unchanged`、`remounted`、`relinked`、`renewed`、`removed`、`skipped`）。两者退出码均为 0；`sg status --check` 在任一技能非 `ok` 时退出 1 —— 这是 CI 和 pre-commit 合规检查的钩子。`sg update` 重新拉取所有 git 源技能（分支/tag/默认分支；固定 commit sha 和 local 源不动），解析的 sha 变化时报 `updated`，并同步重写 `sg.lock`。
 
 ## 组定义（schema v1）
 
@@ -201,6 +208,7 @@ sg group add web serve --type git --repo owner/repo --path skills/web --rev v1
 - `path` 选择仓库内的子目录作为技能内容；省略则使用仓库根。
 - `rev` 接受**分支名、标签或完整的 40 位 commit sha**。分支/标签使用浅 `--branch` clone；sha 则直接 fetch 并 checkout。
 - 锁文件（`sg.lock`）在 `resolved_sha` 中记录**实际解析出的 HEAD**，所以 `sg status` 之后能告诉你挂载的技能是否与声明解析结果一致。
+- `sg update` 会原地刷新分支/tag/默认分支源（先 fetch，网络失败时你的挂载不受影响）；固定 sha 天然不可变，永远不会被刷新。
 
 ## 故障排查：`sg doctor`
 
@@ -230,7 +238,7 @@ junction: supported
 python -m unittest discover tests -v
 ```
 
-测试套件共 210 个测试，覆盖 CLI 命令面、组校验、缓存、git 源、挂载、孤立技能与隔离。
+测试套件共 236 个测试，覆盖 CLI 命令面、组校验、缓存、git 源、更新、挂载、多 agent 项目、孤立技能与隔离。
 
 ## 协议
 

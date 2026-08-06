@@ -31,7 +31,7 @@ Each agent already reads a conventional skills directory inside the project root
 | Codex | `.codex/skills` |
 | OpenCode | `.opencode/skills` |
 
-Pick the target with `sg init --agent claude` (choices: `agents`, `claude`, `codex`, `opencode`; default `agents`).
+Pick the target with `sg init --agent claude` (choices: `agents`, `claude`, `codex`, `opencode`; default `agents`). **`--agent` is repeatable** — a project can mount into several agents at once: `sg init --agent claude --agent opencode` serves both `.claude/skills` and `.opencode/skills` from one declaration.
 
 > **Claude Code users**: you MUST run `sg init --agent claude` — Claude Code does not scan `.agents/skills` yet (tracked in [anthropics/claude-code#16345](https://github.com/anthropics/claude-code/issues/16345)); the default would silently load nothing. And after mounting, **fully restart your agent** — skills are registered at process start; a new session inside a long-running agent (e.g. `/new` in OpenCode) does not re-scan.
 
@@ -59,7 +59,7 @@ sg init
 # initialized C:\path\to\project
 ```
 
-This writes `.sg.json` and adds the agent skills dir (`.agents/skills` by default) to your `.gitignore`.
+This writes `.sg.json` (schema v2) and adds the agent skills dir (`.agents/skills` by default) to your `.gitignore`. Use `sg init --agent claude --agent opencode` to serve several agents from one project; `sg init --force --agent codex` retargets an existing project (groups and standalone skills are kept).
 
 ```powershell
 # 2. create a group
@@ -117,7 +117,14 @@ sg sync
 # lint: unchanged
 ```
 
-`sg status` prints one line per mounted skill (`skill (group): state`, where state is `ok`, `missing-link`, `drift`, `conflict`, or `stale`), and `sg sync` repairs mounts to match the declaration (actions: `unchanged`, `remounted`, `relinked`, `renewed`, `removed`, `skipped`). Both exit 0.
+```powershell
+# 9. refresh git-sourced skills to their latest upstream
+sg update
+# lint: unchanged
+# pytest: updated
+```
+
+`sg status` prints one line per mounted skill (`skill (group): state`, where state is `ok`, `missing-link`, `drift`, `conflict`, or `stale`), and `sg sync` repairs mounts to match the declaration (actions: `unchanged`, `remounted`, `relinked`, `renewed`, `removed`, `skipped`). Both exit 0; `sg status --check` exits 1 as soon as any skill is not `ok` — the hook for CI and pre-commit compliance checks. `sg update` re-fetches every git-source skill (branch/tag/default-branch revs; pinned commit shas and local sources are left alone), reporting `updated` when the resolved sha moved, and rewrites `sg.lock` accordingly.
 
 ## Group definitions (schema v1)
 
@@ -201,6 +208,7 @@ sg group add web serve --type git --repo owner/repo --path skills/web --rev v1
 - `path` selects a subdirectory of the repo as the skill content; omit it to use the repo root.
 - `rev` accepts a **branch name, a tag, or a full 40-character commit sha**. A branch/tag becomes a shallow `--branch` clone; a sha is fetched and checked out directly.
 - The lock (`sg.lock`) records the **actual resolved HEAD** in `resolved_sha`, so `sg status` can later tell you whether the mounted skill matches what the declaration resolved to.
+- `sg update` refreshes branch/tag/default-branch sources in place (fetch first, so a network failure leaves your mounts untouched); a pinned sha is immutable by definition and never refreshed.
 
 ## Troubleshooting: `sg doctor`
 
@@ -230,7 +238,7 @@ The default `SG_HOME` is `~/.sg`. Its layout: `config.json` (global config), `gr
 python -m unittest discover tests -v
 ```
 
-The suite runs 210 tests covering the CLI surface, group validation, caching, git sources, mounting, standalone skills, and isolation.
+The suite runs 236 tests covering the CLI surface, group validation, caching, git sources, updating, mounting, multi-agent projects, standalone skills, and isolation.
 
 ## License
 

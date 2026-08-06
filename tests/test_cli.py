@@ -136,12 +136,41 @@ class TestCli(unittest.TestCase):
     def test_version_prints_exact_version(self):
         result = self.sg("--version")
         self.assertEqual(result.returncode, 0)
-        self.assertEqual(result.stdout.strip(), "0.1.0")
+        self.assertEqual(result.stdout.strip(), "0.2.0")
 
     def test_help_works(self):
         result = self.sg("--help")
         self.assertEqual(result.returncode, 0)
         self.assertIn("init", result.stdout)
+
+    def test_status_check_exits_0_when_ok(self):
+        skill = self.make_skill("demo")
+        self.sg("group", "create", "web")
+        self.sg("group", "add", "web", "demo", "--type", "local", "--path", str(skill))
+        self.sg("init")
+        self.sg("use", "web")
+
+        result = self.sg("status", "--check")
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("demo (web): ok", result.stdout)
+
+    def test_status_check_exits_1_when_missing_link(self):
+        from sg import mount as sg_mount
+        from sg import state as sg_state
+
+        skill = self.make_skill("demo")
+        self.sg("group", "create", "web")
+        self.sg("group", "add", "web", "demo", "--type", "local", "--path", str(skill))
+        self.sg("init")
+        self.sg("use", "web")
+
+        # break the mount safely (never rmtree a junction)
+        link = self.project / ".agents" / "skills" / "demo"
+        sg_mount.unmount_skill(link, sg_state._mount_kind(link))
+
+        result = self.sg("status", "--check")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("demo (web): missing-link", result.stdout)
 
     def test_group_crud_chain(self):
         """create/add/list/show all exit 0 and the group file takes effect."""

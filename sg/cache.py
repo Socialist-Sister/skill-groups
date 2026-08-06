@@ -12,6 +12,7 @@ Python 3.9 compatible (no match statements, no os.path.isjunction).
 
 import os
 import shutil
+import stat
 from pathlib import Path
 
 from . import config, errors, git_util, util
@@ -95,3 +96,69 @@ def _ensure_git(source, skill_dir):
         except Exception as exc:
             raise errors.EnvError(f"failed to copy {src} -> {skill_dir}: {exc}") from exc
     return skill_dir, resolved_sha
+
+
+def refresh_skill_cached(source, skill_id, home=None):
+    """Re-fetch a git source's cache to the latest upstream; return (dir, sha).
+
+    Only meaningful for git sources; local sources return the existing
+    cache untouched (their content is the source itself). The clone is
+    refreshed in place — the fetch happens before anything is rewritten,
+    so a network failure leaves the previous content and the mounts intact.
+    A cache whose clone was manually deleted falls back to a fresh clone.
+    """
+    skill_dir = skill_cache_dir(source, skill_id, home)
+    if source.get("type") != "git":
+        return skill_dir, None
+    if (skill_dir / ".repo").is_dir():
+        return _refresh_git(source, skill_dir)
+    return _ensure_git(source, skill_dir)
+
+
+def _refresh_git(source, skill_dir):
+    """Update an existing git cache: fetch, reset, re-copy the skill content.
+
+    The clone's working tree is reset to the fetched ref, the cached skill
+    content is wiped (keeping .repo), then re-copied from the clone, so
+    upstream deletions are reflected too. Returns (skill_dir, new HEAD sha).
+    """
+    repo_dir = skill_dir / ".repo"
+    git_util.refresh_repo(repo_dir, source.get("rev") or None)
+    for child in os.listdir(skill_dir):
+        if child != ".repo":
+            _force_rmtree(skill_dir / child)
+    sub = source.get("path") or ""
+    src = repo_dir / sub if sub else repo_dir
+    if not src.is_dir():
+        raise errors.UserError(
+            f"skill path {sub!r} not found in repo {source['repo']}"
+        )
+    shutil.copytree(
+        src,
+        skill_dir,
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns(".git"),
+    )
+    return skill_dir, git_util.head_sha(repo_dir)
+
+
+def _force_rmtree(path):
+    """Remove a file or a directory tree, retrying read-only entries.
+
+    Directories are removed with rmtree (read-only files created by git
+    checkouts on Windows are chmodded and retried); plain files are
+    unlinked directly, since rmtree on a file always fails on os.scandir.
+    """
+    path = Path(path)
+    if path.is_dir() and not path.is_symlink():
+        def _onerror(func, failed_path, _exc_info):
+            os.chmod(failed_path, stat.S_IWRITE)
+            func(failed_path)
+
+        shutil.rmtree(path, onerror=_onerror)
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        os.chmod(path, stat.S_IWRITE)
+        os.unlink(path)

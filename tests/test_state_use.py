@@ -45,7 +45,7 @@ class TestInitProject(StateTestCase):
         state.init_project(self.root)
         self.assertEqual(
             util.read_json(lockfile.sg_json(self.root)),
-            {"version": "1", "groups": [], "agent": "agents", "mode": "auto"},
+            {"version": "2", "groups": [], "agents": ["agents"], "mode": "auto", "skills": []},
         )
         self.assertEqual(
             (self.root / ".gitignore").read_text(encoding="utf-8").splitlines(),
@@ -75,9 +75,9 @@ class TestInitProject(StateTestCase):
         )
 
     def test_init_custom_agent_uses_its_skills_dir(self):
-        state.init_project(self.root, agent="claude", mode="copy")
+        state.init_project(self.root, agents=["claude"], mode="copy")
         decl = util.read_json(lockfile.sg_json(self.root))
-        self.assertEqual(decl["agent"], "claude")
+        self.assertEqual(decl["agents"], ["claude"])
         self.assertEqual(decl["mode"], "copy")
         self.assertIn(
             ".claude/skills", (self.root / ".gitignore").read_text(encoding="utf-8")
@@ -85,14 +85,14 @@ class TestInitProject(StateTestCase):
 
     def test_init_unknown_agent_raises_user_error(self):
         with self.assertRaises(errors.UserError):
-            state.init_project(self.root, agent="nope")
+            state.init_project(self.root, agents=["nope"])
 
     def test_project_skills_dir_resolves_declared_agent(self):
-        state.init_project(self.root, agent="codex")
+        state.init_project(self.root, agents=["codex"])
         decl = lockfile.read_declaration(self.root)
         self.assertEqual(
-            state.project_skills_dir(self.root, decl),
-            self.root / ".codex" / "skills",
+            state.project_skills_dirs(self.root, decl),
+            [self.root / ".codex" / "skills"],
         )
 
 

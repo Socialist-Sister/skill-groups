@@ -70,20 +70,20 @@ class IsolationTestCase(unittest.TestCase):
         self.assertEqual(lockfile.read_declaration(self.proj_b)["groups"], ["docs"])
 
     def test_each_project_reads_only_its_own_declaration(self):
-        state.init_project(self.proj_a, agent="claude")
-        state.init_project(self.proj_b, agent="codex")
+        state.init_project(self.proj_a, agents=["claude"])
+        state.init_project(self.proj_b, agents=["codex"])
 
         self.assertEqual(
-            state.project_skills_dir(
+            state.project_skills_dirs(
                 self.proj_a, lockfile.read_declaration(self.proj_a)
             ),
-            self.proj_a / ".claude" / "skills",
+            [self.proj_a / ".claude" / "skills"],
         )
         self.assertEqual(
-            state.project_skills_dir(
+            state.project_skills_dirs(
                 self.proj_b, lockfile.read_declaration(self.proj_b)
             ),
-            self.proj_b / ".codex" / "skills",
+            [self.proj_b / ".codex" / "skills"],
         )
         self.assertEqual(lockfile.read_lock(self.proj_a), {})
         self.assertEqual(lockfile.read_lock(self.proj_b), {})

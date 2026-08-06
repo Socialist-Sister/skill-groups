@@ -33,8 +33,8 @@ def build_parser():
 
     p = sub.add_parser("init", help="initialize the current directory")
     p.add_argument(
-        "--agent", choices=list(config.AGENT_DIRS), default="agents",
-        help="target agent skills dir",
+        "--agent", action="append", choices=list(config.AGENT_DIRS), default=None,
+        help="target agent skills dir (repeatable; default: agents)",
     )
     p.add_argument(
         "--mode", choices=list(mount.MODES), default="auto",
@@ -70,10 +70,19 @@ def build_parser():
     p.set_defaults(func=cmd_ls)
 
     p = sub.add_parser("status", help="show project skill status")
+    p.add_argument(
+        "--check", action="store_true",
+        help="exit 1 when any skill is not ok (for CI)",
+    )
     p.set_defaults(func=cmd_status)
 
     p = sub.add_parser("sync", help="repair project mounts to match the declaration")
     p.set_defaults(func=cmd_sync)
+
+    p = sub.add_parser(
+        "update", help="refresh git-sourced skills to their latest upstream"
+    )
+    p.set_defaults(func=cmd_update)
 
     p = sub.add_parser("group", help="manage skill groups")
     gsub = p.add_subparsers(dest="group_command", metavar="ACTION")
@@ -114,44 +123,17 @@ def build_parser():
 
 
 def cmd_init(args):
-    root = Path.cwd()
-    if args.force and lockfile.sg_json(root).exists():
-        existing = _declared_groups(root)
-        existing_skills = _declared_skills_entries(root)
-        lockfile.write_declaration(
-            root,
-            {
-                "version": "1",
-                "groups": existing,
-                "agent": args.agent,
-                "mode": args.mode,
-                "skills": existing_skills,
-            },
-        )
-        state._append_gitignore(root, config.resolve_agent_dir(args.agent))
-        print(f"reinitialized {root}", flush=True)
-        return 0
-    state.init_project(root, agent=args.agent, mode=args.mode)
-    print(f"initialized {root}", flush=True)
+    state.init_project(
+        Path.cwd(),
+        agents=args.agent or None,
+        mode=args.mode,
+        force=args.force,
+    )
+    print(
+        f"{'reinitialized' if args.force else 'initialized'} {Path.cwd()}",
+        flush=True,
+    )
     return 0
-
-
-def _declared_groups(root):
-    """Groups already declared, preserved when force-rewriting a declaration."""
-    try:
-        declared = lockfile.read_declaration(root).get("groups", [])
-    except (errors.UserError, errors.EnvError):
-        declared = []
-    return declared if isinstance(declared, list) else []
-
-
-def _declared_skills_entries(root):
-    """Standalone skills already declared, preserved when force-rewriting."""
-    try:
-        skills = lockfile.read_declaration(root).get("skills", [])
-    except (errors.UserError, errors.EnvError):
-        skills = []
-    return skills if isinstance(skills, list) else []
 
 
 def cmd_use(args):
@@ -190,16 +172,26 @@ def cmd_ls(args):
 
 def cmd_status(args):
     """Print one "skill_id (group): state" line per status entry."""
-    for item in state.status(Path.cwd()):
+    items = state.status(Path.cwd())
+    for item in items:
         group = item["group"]
         prefix = f"{item['skill']} ({group})" if group else item["skill"]
         print(f"{prefix}: {item['state']}", flush=True)
+    if args.check and any(item["state"] != "ok" for item in items):
+        return 1
     return 0
 
 
 def cmd_sync(args):
     """Repair mounts to match the declaration, one "skill_id: action" line."""
     for item in state.sync_groups(Path.cwd()):
+        print(f"{item['skill']}: {item['action']}", flush=True)
+    return 0
+
+
+def cmd_update(args):
+    """Refresh git-source skills, one "skill_id: action" line."""
+    for item in state.update_groups(Path.cwd()):
         print(f"{item['skill']}: {item['action']}", flush=True)
     return 0
 

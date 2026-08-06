@@ -118,3 +118,26 @@ def head_sha(dest):
             f"failed to read HEAD sha of {dest}: {_truncate_stderr(proc.stderr)}"
         )
     return proc.stdout.strip()
+
+
+def refresh_repo(repo_dir, rev=None):
+    """Fetch the latest upstream into an existing clone and reset the tree to it.
+
+    rev None refreshes the clone's default branch (origin/HEAD); a branch or
+    tag rev fetches exactly that ref and resets to it. A 40-hex commit sha is
+    never passed here (callers skip pinned shas by contract). The fetch runs
+    first and the working tree is only reset after it succeeds, so a network
+    failure leaves the previous content untouched.
+    """
+    if not git_available():
+        raise errors.EnvError("git not found on PATH")
+    repo_dir = Path(repo_dir)
+    if rev is None:
+        _run(["git", "fetch", "origin", "--depth", "1"], cwd=repo_dir)
+        # origin/HEAD tracks the clone-time default branch; set-head -a
+        # re-derives it for shallow clones that lack the symref.
+        _run(["git", "remote", "set-head", "origin", "-a"], cwd=repo_dir)
+        _run(["git", "reset", "--hard", "origin/HEAD"], cwd=repo_dir)
+    else:
+        _run(["git", "fetch", "--depth", "1", "origin", rev], cwd=repo_dir)
+        _run(["git", "reset", "--hard", "FETCH_HEAD"], cwd=repo_dir)
