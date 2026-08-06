@@ -278,6 +278,26 @@ class TestCli(unittest.TestCase):
         self.assertTrue(result.stderr.strip())
         self.assertIn("nonexistent", result.stderr)
 
+    def test_use_standalone_skill_without_group(self):
+        """use --skill/--path alone (no GROUP) mounts the standalone skill."""
+        skill = self.make_skill("wc")
+        self.sg("init")
+        result = self.sg("use", "--skill", "wc", "--path", str(skill))
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("used: wc", result.stdout)
+        self.assertTrue(
+            (self.project / ".agents" / "skills" / "wc" / "SKILL.md").is_file()
+        )
+        status = self.sg("status", "--check")
+        self.assertEqual(status.returncode, 0)
+
+    def test_use_with_nothing_fails(self):
+        """use with neither GROUP nor --skill is a user error (exit 1)."""
+        self.sg("init")
+        result = self.sg("use")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("group", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

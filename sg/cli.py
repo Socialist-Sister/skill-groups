@@ -47,7 +47,10 @@ def build_parser():
     p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("use", help="mount the skills of named groups")
-    p.add_argument("groups", nargs="+", metavar="GROUP")
+    p.add_argument(
+        "groups", nargs="*", metavar="GROUP",
+        help="groups to mount; may be empty when --skill is given",
+    )
     p.add_argument(
         "--skill", action="append", default=[], metavar="ID",
         help="mount a standalone skill directly; pair each --skill with --path",
@@ -139,6 +142,8 @@ def cmd_init(args):
 def cmd_use(args):
     if len(args.skill) != len(args.path):
         raise errors.UserError("--skill and --path must come in pairs")
+    if not args.groups and not args.skill:
+        raise errors.UserError("specify at least one group or one --skill")
     extra_skills = [
         {"id": skill_id, "source": {"type": "local", "path": path}}
         for skill_id, path in zip(args.skill, args.path)
@@ -146,7 +151,7 @@ def cmd_use(args):
     state.use_groups(Path.cwd(), args.groups, extra_skills=extra_skills)
     used = ", ".join(args.groups)
     if extra_skills:
-        used += " + " + ", ".join(args.skill)
+        used = (used + " + " if used else "") + ", ".join(args.skill)
     print(f"used: {used}", flush=True)
     return 0
 
